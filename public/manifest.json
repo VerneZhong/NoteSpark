@@ -5,7 +5,7 @@
   "description": "一个支持 Markdown 导入和预览的浏览器笔记插件",
   "action": {
     "default_popup": "index.html",
-    "default_icon": "icons/markdown.png"
+    "default_icon": "markdown.png"
   },
   "permissions": []
 }

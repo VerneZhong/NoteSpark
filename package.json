@@ -9,10 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "markdown-it": "^14.1.0",
     "markdown-it-mark": "^4.0.0",
     "vue": "^3.5.22"
   },
   "devDependencies": {
+    "@types/chrome": "^0.1.22",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^24.6.0",
     "@vitejs/plugin-vue": "^6.0.1",

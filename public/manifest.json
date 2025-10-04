@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "NodeSpark",
+  "version": "0.0.1",
+  "description": "一个支持 Markdown 导入和预览的浏览器笔记插件",
+  "action": {
+    "default_popup": "index.html",
+    "default_icon": "icons/markdown.png"
+  },
+  "permissions": []
+}

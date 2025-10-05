@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, watch } from "vue"
 import MarkdownIt from "markdown-it"
 import markdownItMark from "markdown-it-mark"
 
@@ -14,6 +14,14 @@ const md = new MarkdownIt({
 
 // 解析内容
 const rendered = ref(md.render(props.content))
+
+// 监听 content 变化，重新渲染
+watch(
+    () => props.content,
+    (newContent) => {
+      rendered.value = md.render(newContent)
+    }
+)
 </script>
 
 <template>

@@ -10,7 +10,7 @@
           :class="{ 'bg-blue-100': note.id === selectedId }"
       >
         <div class="font-medium text-gray-800 truncate">{{ note.title }}</div>
-        <div class="text-xs text-gray-500 truncate">{{ note.preview }}</div>
+        <div class="text-xs text-gray-500 truncate">{{ note.content }}</div>
       </li>
     </ul>
   </div>
@@ -23,17 +23,13 @@ interface Note {
   id: number
   title: string
   content: string
-  preview: string
 }
 
+// 接收父组件传来的 notes
+const props = defineProps<{ notes: Note[] }>()
+
 const emit = defineEmits(["select"])
-
-const notes = ref<Note[]>([
-  { id: 1, title: "第七课：付随行动", content: "# 七課 付随行動\n\n〜がてら...", preview: "〜がてら、〜かたがた..." },
-  { id: 2, title: "第八课：时间表达", content: "# 八課 時間表現\n\n〜とたん...", preview: "〜とたん、〜かと思うと..." },
-])
-
-const selectedId = ref<number | null>(null)
+const selectedId = ref<number | string | null>(null)
 
 function select(note: Note) {
   selectedId.value = note.id

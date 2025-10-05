@@ -7,5 +7,12 @@
     "default_popup": "index.html",
     "default_icon": "markdown.png"
   },
-  "permissions": []
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
 }

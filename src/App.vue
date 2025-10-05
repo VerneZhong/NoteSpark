@@ -25,9 +25,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
-import Toolbar from "./components/Toolbar.vue"
 import NoteList from "./components/NoteList.vue"
 import MarkdownViewer from "./components/MarkdownViewer.vue"
+import Toolbar from "./components/Toolbar.vue"
 import { loadNotes, type Note } from "./utils/storage"
 
 const notes = ref<Note[]>([])

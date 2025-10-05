@@ -1,29 +1,35 @@
 // storage.ts
 export interface Note {
     id: number
-    title: string,   // 文件名
-    content: string, // markdown内容
+    title: string
+    content: string
     createdAt: number
 }
 
-/**
- * 读取存储的 ideas
- */
+const isChromeEnv = typeof chrome !== "undefined" && !!chrome.runtime?.sendMessage
+
 export function loadNotes(): Promise<Note[]> {
     return new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: "loadIdeas" }, (response) => {
-            resolve(Array.isArray(response?.data) ? response.data : [])
-        })
+        if (isChromeEnv) {
+            chrome.runtime.sendMessage({ type: "loadNotes" }, (response) => {
+                resolve(Array.isArray(response?.data) ? response.data : [])
+            })
+        } else {
+            // fallback for local dev
+            const data = localStorage.getItem("notes")
+            resolve(data ? JSON.parse(data) : [])
+        }
     })
 }
 
-/**
- * 保存 ideas
- */
-export function saveNotes(ideas: Note[]): Promise<void> {
+export function saveNotes(notes: Note[]): Promise<void> {
     return new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: "saveIdeas", data: ideas }, () => {
+        if (isChromeEnv) {
+            chrome.runtime.sendMessage({ type: "saveNotes", data: notes }, () => resolve())
+        } else {
+            // fallback for local dev
+            localStorage.setItem("notes", JSON.stringify(notes))
             resolve()
-        })
+        }
     })
 }

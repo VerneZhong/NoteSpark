@@ -17,7 +17,7 @@
     <!-- 工具栏 -->
     <Toolbar
         :notes="notes"
-        @update:notes="notes = $event"
+        @update:notes="handleUpdateNotes"
         class="border-b border-gray-200"
     />
   </div>
@@ -39,6 +39,13 @@ onMounted(async () => {
 
 function selectNote(note: Note) {
   selectedNote.value = note
+}
+
+function handleUpdateNotes(updated: Note[]) {
+  notes.value = updated
+  if (updated.length === 0) {
+    selectedNote.value = null
+  }
 }
 </script>
 

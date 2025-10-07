@@ -1,57 +1,91 @@
 <template>
-  <div class="app flex flex-col h-[500px] bg-white rounded-xl shadow-lg overflow-hidden">
-    <!-- 内容区：左边列表 + 右边内容 -->
-    <div class="flex flex-1 overflow-hidden">
-      <!-- 左侧笔记列表 -->
-      <div class="w-1/3 border-r border-gray-200 overflow-y-auto">
-        <NoteList :notes="notes" @select="selectNote" />
-      </div>
-
-      <!-- 右侧笔记预览 -->
-      <div class="flex-1 overflow-y-auto p-4">
-        <MarkdownViewer v-if="selectedNote" :content="selectedNote.content" />
-        <p v-else class="text-gray-400 text-center mt-10">请选择一个笔记查看</p>
-      </div>
+  <div class="app-container">
+    <!-- 左栏：文件夹管理 -->
+    <div class="sidebar-left">
+      <Toolbar @dir-changed="handleDirChange" @data-updated="updateNotes" />
     </div>
 
-    <!-- 工具栏 -->
-    <Toolbar
-        :notes="notes"
-        @update:notes="handleUpdateNotes"
-        class="border-b border-gray-200"
-    />
+    <!-- 中栏：笔记列表 -->
+    <div class="sidebar-middle">
+      <NoteList
+          :notes="currentNotes"
+          :selectedNote="selectedNote"
+          @select="(note: Note) => selectedNote = note"
+      />
+    </div>
+
+    <!-- 右栏：Markdown 预览 -->
+    <div class="content-main">
+      <MarkdownViewer :note="selectedNote" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
-import NoteList from "./components/NoteList.vue"
-import MarkdownViewer from "./components/MarkdownViewer.vue"
-import Toolbar from "./components/Toolbar.vue"
-import { loadNotes, type Note } from "./utils/storage"
+import { ref } from "vue";
+import Toolbar from "@/components/Toolbar.vue";
+import NoteList from "@/components/NoteList.vue";
+import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import { loadNotes } from "@/utils/storage";
 
-const notes = ref<Note[]>([])
-const selectedNote = ref<Note | null>(null)
-
-onMounted(async () => {
-  notes.value = await loadNotes()
-})
-
-function selectNote(note: Note) {
-  selectedNote.value = note
+interface Note {
+  name: string;
+  content: string;
 }
 
-function handleUpdateNotes(updated: Note[]) {
-  notes.value = updated
-  if (updated.length === 0) {
-    selectedNote.value = null
+const allNotes = ref<Record<string, Note[]>>({});
+const currentNotes = ref<Note[]>([]);
+const selectedNote = ref<Note | null>(null);
+
+function updateNotes(notes: Record<string, Note[]>) {
+  allNotes.value = notes;
+}
+
+async function handleDirChange(dirName: string) {
+  if (!dirName) {
+    currentNotes.value = [];
+    selectedNote.value = null;
+    return;
   }
+
+  if (!Object.keys(allNotes.value).length) {
+    allNotes.value = await loadNotes();
+  }
+
+  currentNotes.value = allNotes.value[dirName] || [];
+  selectedNote.value = null;
 }
 </script>
 
-<style>
-.app {
-  width: 360px;
-  height: 500px;
+<style scoped>
+.app-container {
+  display: flex;
+  width: 100%;
+  min-width: 600px;
+  height: 100vh;
+  background: white;
+  overflow-x: auto;
+}
+
+.sidebar-left {
+  width: 160px;
+  min-width: 160px;
+  flex-shrink: 0;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+}
+
+.sidebar-middle {
+  width: 200px;
+  min-width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+}
+
+.content-main {
+  flex: 1;
+  min-width: 240px;
+  overflow-y: auto;
 }
 </style>

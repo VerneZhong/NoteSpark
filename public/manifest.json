@@ -4,15 +4,23 @@
   "version": "0.0.1",
   "description": "一个支持 Markdown 导入和预览的浏览器笔记插件",
   "action": {
-    "default_popup": "index.html",
-    "default_icon": "markdown.png"
+    "default_title": "打开 NodeSpark"
+  },
+  "side_panel": {
+    "default_path": "index.html"
   },
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "sidePanel"
   ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
+  },
+  "icons": {
+    "16": "markdown.png",
+    "48": "markdown.png",
+    "128": "markdown.png"
   }
 }

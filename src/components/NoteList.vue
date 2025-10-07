@@ -1,38 +1,27 @@
 <template>
-  <div class="w-64 bg-gray-50 border-r border-gray-200 overflow-y-auto">
-    <div class="p-3 border-b font-semibold text-gray-700">笔记列表</div>
-    <ul>
-      <li
-          v-for="note in notes"
-          :key="note.id"
-          @click="select(note)"
-          class="px-3 py-2 cursor-pointer hover:bg-blue-50 transition"
-          :class="{ 'bg-blue-100': note.id === selectedId }"
-      >
-        <div class="font-medium text-gray-800 truncate">{{ note.title }}</div>
-        <div class="text-xs text-gray-500 truncate">{{ note.content }}</div>
-      </li>
-    </ul>
+  <div class="h-full">
+    <div v-if="notes?.length">
+      <ul>
+        <li
+            v-for="(note, idx) in notes"
+            :key="idx"
+            class="cursor-pointer px-3 py-2 hover:bg-gray-100 border-b truncate"
+            :class="{ 'bg-blue-50': note.name === selectedNote?.name }"
+            @click="$emit('select', note)"
+        >
+          {{ note.name }}
+        </li>
+      </ul>
+    </div>
+    <div v-else class="text-gray-400 text-center py-4">
+      当前目录暂无笔记
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-
-interface Note {
-  id: number
-  title: string
-  content: string
-}
-
-// 接收父组件传来的 notes
-const props = defineProps<{ notes: Note[] }>()
-
-const emit = defineEmits(["select"])
-const selectedId = ref<number | string | null>(null)
-
-function select(note: Note) {
-  selectedId.value = note.id
-  emit("select", note)
-}
+defineProps<{
+  notes: { name: string; content: string }[];
+  selectedNote?: { name: string; content: string } | null;
+}>();
 </script>

@@ -3,36 +3,50 @@ import { ref, watch } from "vue"
 import MarkdownIt from "markdown-it"
 import markdownItMark from "markdown-it-mark"
 
-const props = defineProps<{ content: string }>()
+interface Note {
+  name: string
+  content: string
+}
 
-// 初始化 markdown-it 并启用 mark 插件（支持 ==高亮==）
+const props = defineProps<{
+  note: Note | null
+}>()
+
+// 初始化 markdown-it 并启用 mark 插件
 const md = new MarkdownIt({
   html: true,
   linkify: true,
   typographer: true
 }).use(markdownItMark)
 
-// 解析内容
-const rendered = ref(md.render(props.content))
+// 初始渲染（如果有内容）
+const rendered = ref(props.note ? md.render(props.note.content) : "")
 
-// 监听 content 变化，重新渲染
+// 监听 note 内容变化
 watch(
-    () => props.content,
+    () => props.note?.content,
     (newContent) => {
-      rendered.value = md.render(newContent)
-    }
+      rendered.value = md.render(newContent || "")
+    },
+    { immediate: true }
 )
 </script>
 
 <template>
-  <div v-html="rendered" class="prose prose-sm max-w-none"></div>
+  <div class="h-full p-4">
+    <div v-if="note">
+      <h2 class="font-bold text-lg mb-2 border-b pb-1">{{ note.name }}</h2>
+      <div v-html="rendered" class="prose max-w-none"></div>
+    </div>
+    <div v-else class="text-gray-400 text-center py-10">请选择一条笔记</div>
+  </div>
 </template>
 
 <style scoped>
 .prose mark {
-  background-color: #F7D26E;
-  color: black;
-  padding: 0 2px;
-  border-radius: 2px;
+  background-color: #f7f7f7;
+  padding: 8px;
+  border-radius: 6px;
+  overflow-x: auto;
 }
 </style>

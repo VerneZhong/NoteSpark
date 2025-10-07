@@ -1,35 +1,36 @@
-// storage.ts
-export interface Note {
-    id: number
-    title: string
-    content: string
-    createdAt: number
+// src/utils/storage.ts
+
+const isChromeExtension = typeof chrome !== 'undefined' && !!chrome.storage;
+
+export async function loadNotes(): Promise<Record<string, any[]>> {
+    if (isChromeExtension) {
+        return new Promise(resolve => {
+            chrome.storage.local.get(['notes'], result => {
+                resolve(result.notes || {});
+            });
+        });
+    } else {
+        const data = localStorage.getItem('notes');
+        return data ? JSON.parse(data) : {};
+    }
 }
 
-const isChromeEnv = typeof chrome !== "undefined" && !!chrome.runtime?.sendMessage
-
-export function loadNotes(): Promise<Note[]> {
-    return new Promise((resolve) => {
-        if (isChromeEnv) {
-            chrome.runtime.sendMessage({ type: "loadNotes" }, (response) => {
-                resolve(Array.isArray(response?.data) ? response.data : [])
-            })
-        } else {
-            // fallback for local dev
-            const data = localStorage.getItem("notes")
-            resolve(data ? JSON.parse(data) : [])
-        }
-    })
+export async function saveNotes(notes: Record<string, any[]>) {
+    if (isChromeExtension) {
+        return new Promise<void>(resolve => {
+            chrome.storage.local.set({ notes }, () => resolve());
+        });
+    } else {
+        localStorage.setItem('notes', JSON.stringify(notes));
+    }
 }
 
-export function saveNotes(notes: Note[]): Promise<void> {
-    return new Promise((resolve) => {
-        if (isChromeEnv) {
-            chrome.runtime.sendMessage({ type: "saveNotes", data: notes }, () => resolve())
-        } else {
-            // fallback for local dev
-            localStorage.setItem("notes", JSON.stringify(notes))
-            resolve()
-        }
-    })
+export async function clearNotes() {
+    if (isChromeExtension) {
+        return new Promise<void>(resolve => {
+            chrome.storage.local.remove('notes', () => resolve());
+        });
+    } else {
+        localStorage.removeItem('notes');
+    }
 }

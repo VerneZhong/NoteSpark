@@ -5,6 +5,11 @@ import path from "path";
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
     outDir: 'dist', // 输出到 dist 目录
     rollupOptions: {

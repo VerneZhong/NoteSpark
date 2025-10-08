@@ -1,14 +1,25 @@
 <template>
   <div class="flex flex-col h-full bg-gray-50 p-3 space-y-4">
     <!-- 导入目录按钮 -->
-    <label class="cursor-pointer bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 w-full text-center text-sm">
-      导入目录
-      <input type="file" webkitdirectory directory multiple hidden @change="handleDirImport" />
+    <label
+        class="cursor-pointer bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 w-full text-center text-sm"
+        :class="{ 'opacity-50 cursor-not-allowed': importing }"
+    >
+      {{ importing ? '导入中...' : '导入目录' }}
+      <input
+          type="file"
+          webkitdirectory
+          directory
+          multiple
+          hidden
+          @change="handleDirImport"
+          :disabled="importing"
+      />
     </label>
 
     <!-- 导入进度提示 -->
-    <div v-if="importing" class="text-xs text-blue-600 text-center">
-      正在导入... {{ importProgress }}
+    <div v-if="importing" class="text-xs text-blue-600 text-center animate-pulse">
+      正在处理文件... {{ processedFiles }}/{{ totalFiles }}
     </div>
 
     <!-- 目录下拉选择 -->
@@ -19,12 +30,14 @@
         :disabled="importing"
     >
       <option value="">请选择目录</option>
-      <option v-for="(v, name) in allNotes" :key="name" :value="name">{{ name }}</option>
+      <option v-for="(v, name) in allNotes" :key="name" :value="name">
+        {{ name }} ({{ v.length }})
+      </option>
     </select>
 
     <!-- 清空全部 -->
     <button
-        class="w-full text-red-500 text-sm border border-red-300 px-3 py-2 rounded hover:bg-red-50"
+        class="w-full text-red-500 text-sm border border-red-300 px-3 py-2 rounded hover:bg-red-50 disabled:opacity-50"
         @click="clearAll"
         :disabled="importing"
     >
@@ -32,33 +45,29 @@
     </button>
 
     <!-- 存储使用情况 -->
-    <div v-if="storageInfo" class="text-xs text-gray-500 text-center">
-      已用: {{ storageInfo }}
+    <div v-if="storageInfo" class="text-xs text-gray-500 text-center p-2 bg-gray-100 rounded">
+      {{ storageInfo }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { saveNotes, loadNotes, clearNotes } from "@/utils/storage";
+import { ref, onMounted } from "vue";
+import { saveNotes, loadNotes, clearNotes, getStorageUsage } from "@/utils/storage";
 
 const emit = defineEmits(["dir-changed", "data-updated"]);
 
 const allNotes = ref<Record<string, any[]>>({});
 const selectedDir = ref("");
 const importing = ref(false);
-const importProgress = ref("");
+const processedFiles = ref(0);
+const totalFiles = ref(0);
 const storageInfo = ref("");
 
-// 常量配置
-const MAX_FILE_SIZE = 500 * 1024; // 单个文件最大 500KB
-const MAX_FILES = 200; // 最多导入 200 个文件
-const MAX_TOTAL_SIZE = 4 * 1024 * 1024; // 总大小不超过 4MB
-
 // 初始化时加载数据
-loadNotes().then((data) => {
-  allNotes.value = data;
-  updateStorageInfo();
+onMounted(async () => {
+  allNotes.value = await loadNotes();
+  await updateStorageInfo();
 });
 
 async function handleDirImport(e: Event) {
@@ -67,7 +76,7 @@ async function handleDirImport(e: Event) {
   if (!files || !files.length) return;
 
   importing.value = true;
-  importProgress.value = "0%";
+  processedFiles.value = 0;
 
   try {
     const fileArray = Array.from(files);
@@ -75,71 +84,71 @@ async function handleDirImport(e: Event) {
         (file) => file.type === "text/markdown" || file.name.endsWith(".md")
     );
 
-    // 检查文件数量
-    if (mdFiles.length > MAX_FILES) {
-      alert(`文件数量过多（${mdFiles.length}个），最多支持 ${MAX_FILES} 个文件。请分批导入。`);
-      importing.value = false;
+    if (mdFiles.length === 0) {
+      alert("未找到 Markdown 文件");
       return;
     }
 
+    totalFiles.value = mdFiles.length;
     const newNotes: Record<string, any[]> = {};
-    let totalSize = 0;
-    let processedCount = 0;
 
-    for (const file of mdFiles) {
-      // 检查单个文件大小
-      if (file.size > MAX_FILE_SIZE) {
-        console.warn(`跳过过大文件: ${file.name} (${(file.size / 1024).toFixed(0)}KB)`);
-        continue;
-      }
+    // 分批处理文件，避免阻塞
+    const batchSize = 10;
+    for (let i = 0; i < mdFiles.length; i += batchSize) {
+      const batch = mdFiles.slice(i, i + batchSize);
 
-      // 检查总大小
-      totalSize += file.size;
-      if (totalSize > MAX_TOTAL_SIZE) {
-        alert(`总文件大小超过限制（4MB），已导入 ${processedCount} 个文件。请清理后再导入更多。`);
-        break;
-      }
+      await Promise.all(
+          batch.map(async (file) => {
+            try {
+              const content = await file.text();
+              const parts = file.webkitRelativePath.split("/");
+              const dirName = parts.length > 1 ? parts[0] : "默认目录";
 
-      try {
-        const content = await file.text();
-        const parts = file.webkitRelativePath.split("/");
-        const dirName = parts.length > 1 ? parts[0] : "默认目录";
+              if (!newNotes[dirName]) {
+                newNotes[dirName] = [];
+              }
 
-        newNotes[dirName] = newNotes[dirName] || [];
-        newNotes[dirName].push({
-          name: file.name,
-          content: content.slice(0, 100000), // 限制单个文件内容最大 100KB
-        });
+              newNotes[dirName].push({
+                name: file.name,
+                content,
+              });
 
-        processedCount++;
-        importProgress.value = `${Math.round((processedCount / mdFiles.length) * 100)}%`;
-      } catch (err) {
-        console.error(`读取文件失败: ${file.name}`, err);
-      }
+              processedFiles.value++;
+            } catch (err) {
+              console.error(`读取文件失败: ${file.name}`, err);
+            }
+          })
+      );
+
+      // 让出主线程，避免页面卡死
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    if (processedCount === 0) {
-      alert("没有成功导入任何文件，请检查文件格式和大小。");
-      importing.value = false;
+    if (processedFiles.value === 0) {
+      alert("没有成功导入任何文件");
       return;
     }
+
+    console.log("开始保存到 storage...");
 
     // 合并现有数据
     allNotes.value = { ...allNotes.value, ...newNotes };
 
-    // 保存到 storage
+    // 保存到 storage（使用优化后的分块保存）
     await saveNotes(allNotes.value);
-    emit("data-updated", allNotes.value);
 
-    updateStorageInfo();
-    alert(`成功导入 ${processedCount} 个文件！`);
-  } catch (error) {
+    emit("data-updated", allNotes.value);
+    await updateStorageInfo();
+
+    alert(`成功导入 ${processedFiles.value} 个文件！`);
+  } catch (error: any) {
     console.error("导入失败:", error);
-    alert("导入失败，请查看控制台错误信息。");
+    alert(`导入失败: ${error.message || "未知错误"}`);
   } finally {
     importing.value = false;
-    importProgress.value = "";
-    // 清空 input，允许重复选择
+    processedFiles.value = 0;
+    totalFiles.value = 0;
+    // 清空 input
     input.value = "";
   }
 }
@@ -149,23 +158,27 @@ function emitDirChange() {
 }
 
 async function clearAll() {
-  if (confirm("确定要清空全部笔记吗？")) {
-    await clearNotes();
-    allNotes.value = {};
-    selectedDir.value = "";
-    emit("data-updated", {});
-    emit("dir-changed", "");
-    updateStorageInfo();
+  if (confirm("确定要清空全部笔记吗？此操作不可恢复！")) {
+    try {
+      await clearNotes();
+      allNotes.value = {};
+      selectedDir.value = "";
+      emit("data-updated", {});
+      emit("dir-changed", "");
+      await updateStorageInfo();
+      alert("已清空所有笔记");
+    } catch (error: any) {
+      alert(`清空失败: ${error.message}`);
+    }
   }
 }
 
 async function updateStorageInfo() {
   try {
-    const data = await chrome.storage.local.get(null);
-    const size = JSON.stringify(data).length;
-    const sizeKB = (size / 1024).toFixed(1);
-    const percentage = ((size / (5 * 1024 * 1024)) * 100).toFixed(1);
-    storageInfo.value = `${sizeKB}KB (${percentage}%)`;
+    const usage = await getStorageUsage();
+    const sizeKB = (usage.bytesInUse / 1024).toFixed(1);
+    const quotaMB = (usage.quota / 1024 / 1024).toFixed(1);
+    storageInfo.value = `已用: ${sizeKB}KB / ${quotaMB}MB (${usage.percentage}%)`;
   } catch (err) {
     console.error("获取存储信息失败:", err);
   }

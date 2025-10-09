@@ -7,6 +7,7 @@
     >
       {{ importing ? '导入中...' : '导入目录' }}
       <input
+          ref="fileInput"
           type="file"
           webkitdirectory
           directory
@@ -18,8 +19,8 @@
     </label>
 
     <!-- 导入进度提示 -->
-    <div v-if="importing" class="text-xs text-blue-600 text-center animate-pulse">
-      正在处理文件... {{ processedFiles }}/{{ totalFiles }}
+    <div v-if="importing" class="text-xs text-blue-600 text-center">
+      {{ importStatus }}
     </div>
 
     <!-- 目录下拉选择 -->
@@ -60,9 +61,9 @@ const emit = defineEmits(["dir-changed", "data-updated"]);
 const allNotes = ref<Record<string, any[]>>({});
 const selectedDir = ref("");
 const importing = ref(false);
-const processedFiles = ref(0);
-const totalFiles = ref(0);
+const importStatus = ref("");
 const storageInfo = ref("");
+const fileInput = ref<HTMLInputElement | null>(null);
 
 // 初始化时加载数据
 onMounted(async () => {
@@ -70,13 +71,39 @@ onMounted(async () => {
   await updateStorageInfo();
 });
 
+/**
+ * 使用 FileReader 安全读取文件
+ */
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        resolve(text || "");
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error(`读取文件失败: ${file.name}`));
+    };
+
+    // 使用 readAsText 而不是 file.text()
+    reader.readAsText(file, "UTF-8");
+  });
+}
+
 async function handleDirImport(e: Event) {
   const input = e.target as HTMLInputElement;
   const files = input.files;
+
   if (!files || !files.length) return;
 
   importing.value = true;
-  processedFiles.value = 0;
+  importStatus.value = "准备导入...";
 
   try {
     const fileArray = Array.from(files);
@@ -89,67 +116,85 @@ async function handleDirImport(e: Event) {
       return;
     }
 
-    totalFiles.value = mdFiles.length;
+    console.log(`找到 ${mdFiles.length} 个 Markdown 文件`);
+    importStatus.value = `找到 ${mdFiles.length} 个文件`;
+
     const newNotes: Record<string, any[]> = {};
+    let successCount = 0;
+    let failCount = 0;
 
-    // 分批处理文件，避免阻塞
-    const batchSize = 10;
-    for (let i = 0; i < mdFiles.length; i += batchSize) {
-      const batch = mdFiles.slice(i, i + batchSize);
+    // 逐个处理文件，避免并发问题
+    for (let i = 0; i < mdFiles.length; i++) {
+      const file = mdFiles[i];
 
-      await Promise.all(
-          batch.map(async (file) => {
-            try {
-              const content = await file.text();
-              const parts = file.webkitRelativePath.split("/");
-              const dirName = parts.length > 1 ? parts[0] : "默认目录";
+      try {
+        importStatus.value = `正在读取: ${file.name} (${i + 1}/${mdFiles.length})`;
+        console.log(`读取文件 ${i + 1}/${mdFiles.length}: ${file.name}`);
 
-              if (!newNotes[dirName]) {
-                newNotes[dirName] = [];
-              }
+        // 使用 FileReader 安全读取
+        const content = await readFileAsText(file);
 
-              newNotes[dirName].push({
-                name: file.name,
-                content,
-              });
+        // 获取目录名
+        const parts = file.webkitRelativePath.split("/");
+        const dirName = parts.length > 1 ? parts[0] : "默认目录";
 
-              processedFiles.value++;
-            } catch (err) {
-              console.error(`读取文件失败: ${file.name}`, err);
-            }
-          })
-      );
+        if (!newNotes[dirName]) {
+          newNotes[dirName] = [];
+        }
 
-      // 让出主线程，避免页面卡死
-      await new Promise((resolve) => setTimeout(resolve, 0));
+        newNotes[dirName].push({
+          name: file.name,
+          content: content
+        });
+
+        successCount++;
+
+        // 每处理 5 个文件，让出主线程
+        if (i % 5 === 4) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+
+      } catch (error) {
+        console.error(`读取文件失败: ${file.name}`, error);
+        failCount++;
+      }
     }
 
-    if (processedFiles.value === 0) {
+    if (successCount === 0) {
       alert("没有成功导入任何文件");
       return;
     }
 
-    console.log("开始保存到 storage...");
+    console.log(`读取完成，成功: ${successCount}, 失败: ${failCount}`);
+    importStatus.value = "正在保存...";
 
     // 合并现有数据
     allNotes.value = { ...allNotes.value, ...newNotes };
 
-    // 保存到 storage（使用优化后的分块保存）
+    // 保存到存储（使用优化后的 IndexedDB）
+    console.log("开始保存到存储...");
     await saveNotes(allNotes.value);
+    console.log("保存完成");
 
     emit("data-updated", allNotes.value);
     await updateStorageInfo();
 
-    alert(`成功导入 ${processedFiles.value} 个文件！`);
+    importStatus.value = `完成！成功: ${successCount}${failCount > 0 ? `, 失败: ${failCount}` : ''}`;
+
+    setTimeout(() => {
+      importStatus.value = "";
+    }, 3000);
+
   } catch (error: any) {
     console.error("导入失败:", error);
     alert(`导入失败: ${error.message || "未知错误"}`);
   } finally {
     importing.value = false;
-    processedFiles.value = 0;
-    totalFiles.value = 0;
-    // 清空 input
-    input.value = "";
+
+    // 清空 input，允许重复选择相同目录
+    if (fileInput.value) {
+      fileInput.value.value = "";
+    }
   }
 }
 
@@ -158,18 +203,21 @@ function emitDirChange() {
 }
 
 async function clearAll() {
-  if (confirm("确定要清空全部笔记吗？此操作不可恢复！")) {
-    try {
-      await clearNotes();
-      allNotes.value = {};
-      selectedDir.value = "";
-      emit("data-updated", {});
-      emit("dir-changed", "");
-      await updateStorageInfo();
-      alert("已清空所有笔记");
-    } catch (error: any) {
-      alert(`清空失败: ${error.message}`);
-    }
+  if (!confirm("确定要清空全部笔记吗？此操作不可恢复！")) {
+    return;
+  }
+
+  try {
+    await clearNotes();
+    allNotes.value = {};
+    selectedDir.value = "";
+    emit("data-updated", {});
+    emit("dir-changed", "");
+    await updateStorageInfo();
+    alert("已清空所有笔记");
+  } catch (error: any) {
+    console.error("清空失败:", error);
+    alert(`清空失败: ${error.message}`);
   }
 }
 
@@ -178,7 +226,7 @@ async function updateStorageInfo() {
     const usage = await getStorageUsage();
     const sizeKB = (usage.bytesInUse / 1024).toFixed(1);
     const quotaMB = (usage.quota / 1024 / 1024).toFixed(1);
-    storageInfo.value = `已用: ${sizeKB}KB / ${quotaMB}MB (${usage.percentage}%)`;
+    storageInfo.value = `已用: ${sizeKB}KB / ${quotaMB}MB (${usage.percentage.toFixed(1)}%)`;
   } catch (err) {
     console.error("获取存储信息失败:", err);
   }

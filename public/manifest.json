@@ -1,22 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "NodeSpark",
+  "name": "NoteSpark",
   "version": "0.0.1",
   "description": "一个支持 Markdown 导入和预览的浏览器笔记插件",
-  "action": {
-    "default_title": "打开 NodeSpark"
-  },
   "side_panel": {
     "default_path": "index.html"
   },
-  "permissions": [
-    "storage",
-    "tabs",
-    "sidePanel"
-  ],
+  "action": {
+    "default_title": "打开 NoteSpark"
+  },
+  "permissions": ["storage", "tabs", "sidePanel"],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "icons": {
     "16": "markdown.png",

@@ -46,7 +46,10 @@
     </button>
 
     <!-- 存储使用情况 -->
-    <div v-if="storageInfo" class="text-xs text-gray-500 text-center p-2 bg-gray-100 rounded">
+    <div
+        v-if="storageInfo"
+        class="text-xs text-gray-500 text-center p-2 bg-gray-100 rounded"
+    >
       {{ storageInfo }}
     </div>
   </div>
@@ -54,7 +57,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { saveNotes, loadNotes, clearNotes, getStorageUsage } from "@/utils/storage";
 
 const emit = defineEmits(["dir-changed", "data-updated"]);
 
@@ -65,9 +67,40 @@ const importStatus = ref("");
 const storageInfo = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 
+/* -------------------------------
+   👇 背景通信版存储操作函数
+-------------------------------- */
+async function loadNotesFromBackground(): Promise<Record<string, any[]>> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "loadNotes" }, (response) => {
+      resolve(response?.data || {});
+    });
+  });
+}
+
+async function saveNotesToBackground(data: Record<string, any[]>) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "saveNotes", data }, (response) => {
+      resolve(response?.success);
+    });
+  });
+}
+
+async function clearNotesInBackground() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "clearNotes" }, (response) => {
+      resolve(response?.success);
+    });
+  });
+}
+
+/* -------------------------------
+   👇 组件逻辑
+-------------------------------- */
+
 // 初始化时加载数据
 onMounted(async () => {
-  allNotes.value = await loadNotes();
+  allNotes.value = await loadNotesFromBackground();
   await updateStorageInfo();
 });
 
@@ -91,15 +124,16 @@ function readFileAsText(file: File): Promise<string> {
       reject(new Error(`读取文件失败: ${file.name}`));
     };
 
-    // 使用 readAsText 而不是 file.text()
     reader.readAsText(file, "UTF-8");
   });
 }
 
+/**
+ * 导入目录
+ */
 async function handleDirImport(e: Event) {
   const input = e.target as HTMLInputElement;
   const files = input.files;
-
   if (!files || !files.length) return;
 
   importing.value = true;
@@ -116,46 +150,34 @@ async function handleDirImport(e: Event) {
       return;
     }
 
-    console.log(`找到 ${mdFiles.length} 个 Markdown 文件`);
     importStatus.value = `找到 ${mdFiles.length} 个文件`;
 
     const newNotes: Record<string, any[]> = {};
     let successCount = 0;
     let failCount = 0;
 
-    // 逐个处理文件，避免并发问题
     for (let i = 0; i < mdFiles.length; i++) {
       const file = mdFiles[i];
 
       try {
-        importStatus.value = `正在读取: ${file.name} (${i + 1}/${mdFiles.length})`;
-        console.log(`读取文件 ${i + 1}/${mdFiles.length}: ${file.name}`);
-
-        // 使用 FileReader 安全读取
+        importStatus.value = `读取: ${file.name} (${i + 1}/${mdFiles.length})`;
         const content = await readFileAsText(file);
 
-        // 获取目录名
         const parts = file.webkitRelativePath.split("/");
         const dirName = parts.length > 1 ? parts[0] : "默认目录";
 
-        if (!newNotes[dirName]) {
-          newNotes[dirName] = [];
-        }
+        if (!newNotes[dirName]) newNotes[dirName] = [];
 
         newNotes[dirName].push({
           name: file.name,
-          content: content
+          content: content,
         });
 
         successCount++;
 
-        // 每处理 5 个文件，让出主线程
-        if (i % 5 === 4) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-
+        if (i % 5 === 4) await new Promise((r) => setTimeout(r, 10));
       } catch (error) {
-        console.error(`读取文件失败: ${file.name}`, error);
+        console.error(`读取失败: ${file.name}`, error);
         failCount++;
       }
     }
@@ -165,36 +187,25 @@ async function handleDirImport(e: Event) {
       return;
     }
 
-    console.log(`读取完成，成功: ${successCount}, 失败: ${failCount}`);
     importStatus.value = "正在保存...";
-
-    // 合并现有数据
     allNotes.value = { ...allNotes.value, ...newNotes };
 
-    // 保存到存储（使用优化后的 IndexedDB）
-    console.log("开始保存到存储...");
-    await saveNotes(allNotes.value);
-    console.log("保存完成");
+    await saveNotesToBackground(allNotes.value);
 
     emit("data-updated", allNotes.value);
     await updateStorageInfo();
 
-    importStatus.value = `完成！成功: ${successCount}${failCount > 0 ? `, 失败: ${failCount}` : ''}`;
+    importStatus.value = `完成！成功: ${successCount}${
+        failCount > 0 ? `, 失败: ${failCount}` : ""
+    }`;
 
-    setTimeout(() => {
-      importStatus.value = "";
-    }, 3000);
-
+    setTimeout(() => (importStatus.value = ""), 3000);
   } catch (error: any) {
     console.error("导入失败:", error);
     alert(`导入失败: ${error.message || "未知错误"}`);
   } finally {
     importing.value = false;
-
-    // 清空 input，允许重复选择相同目录
-    if (fileInput.value) {
-      fileInput.value.value = "";
-    }
+    if (fileInput.value) fileInput.value.value = "";
   }
 }
 
@@ -203,12 +214,10 @@ function emitDirChange() {
 }
 
 async function clearAll() {
-  if (!confirm("确定要清空全部笔记吗？此操作不可恢复！")) {
-    return;
-  }
+  if (!confirm("确定要清空全部笔记吗？此操作不可恢复！")) return;
 
   try {
-    await clearNotes();
+    await clearNotesInBackground();
     allNotes.value = {};
     selectedDir.value = "";
     emit("data-updated", {});
@@ -223,10 +232,13 @@ async function clearAll() {
 
 async function updateStorageInfo() {
   try {
-    const usage = await getStorageUsage();
-    const sizeKB = (usage.bytesInUse / 1024).toFixed(1);
-    const quotaMB = (usage.quota / 1024 / 1024).toFixed(1);
-    storageInfo.value = `已用: ${sizeKB}KB / ${quotaMB}MB (${usage.percentage.toFixed(1)}%)`;
+    chrome.storage.local.getBytesInUse(null, (bytes) => {
+      const quotaBytes = 5 * 1024 * 1024; // Chrome 默认配额约 5MB
+      const percent = ((bytes / quotaBytes) * 100).toFixed(1);
+      const usedKB = (bytes / 1024).toFixed(1);
+      const quotaMB = (quotaBytes / 1024 / 1024).toFixed(1);
+      storageInfo.value = `已用: ${usedKB}KB / ${quotaMB}MB (${percent}%)`;
+    });
   } catch (err) {
     console.error("获取存储信息失败:", err);
   }

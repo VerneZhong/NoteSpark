@@ -1,21 +1,34 @@
 {
   "manifest_version": 3,
   "name": "NoteSpark",
-  "version": "0.0.1",
+  "version": "1.0",
   "description": "一个支持 Markdown 导入和预览的浏览器笔记插件",
-  "side_panel": {
-    "default_path": "index.html"
-  },
   "action": {
-    "default_title": "打开 NoteSpark"
+    "default_popup": "index.html",
+    "default_icon": {
+      "16": "icons/icon.png",
+      "48": "icons/icon.png",
+      "128": "icons/icon.png"
+    }
   },
-  "permissions": ["storage", "tabs", "sidePanel"],
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "icons": {
-    "16": "markdown.png",
-    "48": "markdown.png",
-    "128": "markdown.png"
-  }
+    "16": "icons/icon.png",
+    "48": "icons/icon.png",
+    "128": "icons/icon.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["*.js", "*.css", "*.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

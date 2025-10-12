@@ -1,26 +1,41 @@
 /// <reference types="chrome" />
 
 chrome.runtime.onInstalled.addListener(() => {
-    console.log("Extension installed")
-})
+    console.log("NoteSpark 已安装 ✅");
+    chrome.sidePanel.setOptions({
+        path: "index.html",
+        enabled: true
+    });
+});
 
+chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === "openImportPage") {
+        chrome.tabs.create({
+            url: chrome.runtime.getURL("import.html")
+        });
+    }
+});
+
+// ✅ 负责数据读写（前面 Toolbar.vue 中依赖这些）
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message.type === "loadFolders") {
-        chrome.storage.local.get("folders", (result) => {
-            sendResponse({ data: result.folders || [] })
-        })
-        return true
+    if (message.type === "loadNotes") {
+        chrome.storage.local.get("notes", (result) => {
+            sendResponse({ data: result.notes || {} });
+        });
+        return true;
     }
 
-    if (message.type === "saveFolders") {
-        chrome.storage.local.set({ folders: message.data }, () => {
-            sendResponse({ success: true })
-        })
-        return true
+    if (message.type === "saveNotes") {
+        chrome.storage.local.set({ notes: message.data }, () => {
+            sendResponse({ success: true });
+        });
+        return true;
     }
-})
 
-// 点击扩展图标时打开侧边栏
-chrome.action.onClicked.addListener((tab) => {
-    chrome.sidePanel.open({ windowId: tab.windowId });
+    if (message.type === "clearNotes") {
+        chrome.storage.local.remove("notes", () => {
+            sendResponse({ success: true });
+        });
+        return true;
+    }
 });

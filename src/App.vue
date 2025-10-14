@@ -2,7 +2,7 @@
   <div class="app-container">
     <!-- 左栏：文件夹管理 -->
     <div class="sidebar-left">
-      <Toolbar @dir-changed="handleDirChange" @data-updated="updateNotes" />
+      <Toolbar @dir-changed="handleDirChange" @data-updated="updateNotes"/>
     </div>
 
     <!-- 中栏：笔记列表 -->
@@ -16,17 +16,17 @@
 
     <!-- 右栏：Markdown 预览 -->
     <div class="content-main">
-      <MarkdownViewer :note="selectedNote" />
+      <MarkdownViewer :note="selectedNote"/>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import {onMounted, ref} from "vue";
 import Toolbar from "@/components/Toolbar.vue";
 import NoteList from "@/components/NoteList.vue";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
-import { loadNotes } from "@/utils/storage";
+import {loadNotes} from "@/utils/storage";
 
 interface Note {
   name: string;
@@ -36,6 +36,10 @@ interface Note {
 const allNotes = ref<Record<string, Note[]>>({});
 const currentNotes = ref<Note[]>([]);
 const selectedNote = ref<Note | null>(null);
+
+onMounted(async () => {
+  allNotes.value = await loadNotes();
+});
 
 function updateNotes(notes: Record<string, Note[]>) {
   allNotes.value = notes;

@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import { saveNotes, loadNotes, clearNotes } from "@/utils/storage";
 
 const emit = defineEmits(["dir-changed", "data-updated"]);
 
@@ -67,63 +68,34 @@ const importStatus = ref("");
 const storageInfo = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 
-/* -------------------------------
-   👇 背景通信版存储操作函数
--------------------------------- */
-async function loadNotesFromBackground(): Promise<Record<string, any[]>> {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "loadNotes" }, (response) => {
-      resolve(response?.data || {});
-    });
-  });
-}
-
-async function saveNotesToBackground(data: Record<string, any[]>) {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "saveNotes", data }, (response) => {
-      resolve(response?.success);
-    });
-  });
-}
-
-async function clearNotesInBackground() {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "clearNotes" }, (response) => {
-      resolve(response?.success);
-    });
-  });
-}
-
-/* -------------------------------
-   👇 组件逻辑
--------------------------------- */
-
-// 初始化时加载数据
+/**
+ * 初始化时从 IndexedDB 读取
+ */
 onMounted(async () => {
-  allNotes.value = await loadNotesFromBackground();
-  await updateStorageInfo();
+  try {
+    const notes = await loadNotes();
+    allNotes.value = notes || {};
+    // 自动选中第一个目录
+    const dirs = Object.keys(allNotes.value);
+    if (dirs.length > 0) {
+      selectedDir.value = dirs[0];
+      emit("dir-changed", selectedDir.value);
+      emit("data-updated", allNotes.value);
+    }
+    await updateStorageInfo();
+  } catch (err) {
+    console.error("初始化加载失败:", err);
+  }
 });
 
 /**
- * 使用 FileReader 安全读取文件
+ * 安全读取文件
  */
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string;
-        resolve(text || "");
-      } catch (error) {
-        reject(error);
-      }
-    };
-
-    reader.onerror = () => {
-      reject(new Error(`读取文件失败: ${file.name}`));
-    };
-
+    reader.onload = (e) => resolve((e.target?.result as string) || "");
+    reader.onerror = () => reject(new Error(`读取失败: ${file.name}`));
     reader.readAsText(file, "UTF-8");
   });
 }
@@ -158,23 +130,20 @@ async function handleDirImport(e: Event) {
 
     for (let i = 0; i < mdFiles.length; i++) {
       const file = mdFiles[i];
-
       try {
         importStatus.value = `读取: ${file.name} (${i + 1}/${mdFiles.length})`;
         const content = await readFileAsText(file);
 
         const parts = file.webkitRelativePath.split("/");
         const dirName = parts.length > 1 ? parts[0] : "默认目录";
-
         if (!newNotes[dirName]) newNotes[dirName] = [];
 
         newNotes[dirName].push({
           name: file.name,
-          content: content,
+          content,
         });
 
         successCount++;
-
         if (i % 5 === 4) await new Promise((r) => setTimeout(r, 10));
       } catch (error) {
         console.error(`读取失败: ${file.name}`, error);
@@ -189,8 +158,7 @@ async function handleDirImport(e: Event) {
 
     importStatus.value = "正在保存...";
     allNotes.value = { ...allNotes.value, ...newNotes };
-
-    await saveNotesToBackground(allNotes.value);
+    await saveNotes(allNotes.value);
 
     emit("data-updated", allNotes.value);
     await updateStorageInfo();
@@ -198,7 +166,6 @@ async function handleDirImport(e: Event) {
     importStatus.value = `完成！成功: ${successCount}${
         failCount > 0 ? `, 失败: ${failCount}` : ""
     }`;
-
     setTimeout(() => (importStatus.value = ""), 3000);
   } catch (error: any) {
     console.error("导入失败:", error);
@@ -209,15 +176,20 @@ async function handleDirImport(e: Event) {
   }
 }
 
+/**
+ * 目录切换
+ */
 function emitDirChange() {
   emit("dir-changed", selectedDir.value);
 }
 
+/**
+ * 清空全部
+ */
 async function clearAll() {
   if (!confirm("确定要清空全部笔记吗？此操作不可恢复！")) return;
-
   try {
-    await clearNotesInBackground();
+    await clearNotes();
     allNotes.value = {};
     selectedDir.value = "";
     emit("data-updated", {});
@@ -230,10 +202,13 @@ async function clearAll() {
   }
 }
 
+/**
+ * 更新存储用量信息
+ */
 async function updateStorageInfo() {
   try {
     chrome.storage.local.getBytesInUse(null, (bytes) => {
-      const quotaBytes = 5 * 1024 * 1024; // Chrome 默认配额约 5MB
+      const quotaBytes = 5 * 1024 * 1024;
       const percent = ((bytes / quotaBytes) * 100).toFixed(1);
       const usedKB = (bytes / 1024).toFixed(1);
       const quotaMB = (quotaBytes / 1024 / 1024).toFixed(1);

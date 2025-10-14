@@ -41,51 +41,58 @@ async function initDB(): Promise<IDBDatabase> {
  */
 export async function saveNotes(notes: NotesData): Promise<void> {
     const database = await initDB();
-
     const transaction = database.transaction([STORE_NAME], "readwrite");
     const store = transaction.objectStore(STORE_NAME);
 
-    // 清空旧数据
+    // 先清空旧数据
     store.clear();
 
+    // 把每个目录分别保存
     for (const [dir, files] of Object.entries(notes)) {
-        // 限制每个目录下的文件内容大小
         const safeFiles = files.map(f => ({
             name: f.name,
-            content: f.content.slice(0, 50000), // 防止过长
+            content: f.content.slice(0, 50000),
         }));
-        store.put(safeFiles, dir);
+        store.put(safeFiles, dir); // ✅ 以目录名为 key 存储
     }
 
-    transaction.oncomplete = () => console.log("分块保存成功 (IndexedDB)");
-    transaction.onerror = (e) => console.error("保存失败", e);
+    transaction.oncomplete = () => console.log("保存成功 (IndexedDB)");
+    transaction.onerror = e => console.error("保存失败", e);
 }
 
 /**
- * 从 IndexedDB 加载笔记数据
+ * 从 IndexedDB 加载所有目录数据
  */
 export async function loadNotes(): Promise<NotesData> {
-    try {
-        const database = await initDB();
+    const database = await initDB();
 
-        return new Promise((resolve, reject) => {
-            const transaction = database.transaction([STORE_NAME], "readonly");
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.get("all_notes");
+    return new Promise((resolve, reject) => {
+        const transaction = database.transaction([STORE_NAME], "readonly");
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.getAllKeys();
 
-            request.onsuccess = () => {
-                const data = request.result || {};
-                console.log("加载成功 (IndexedDB)");
-                resolve(data);
-            };
+        request.onsuccess = async () => {
+            const keys = request.result as string[];
+            const result: NotesData = {};
 
-            request.onerror = () => reject(request.error);
-        });
-    } catch (error) {
-        console.error("IndexedDB 加载失败，尝试 chrome.storage.local:", error);
-        // 降级到 chrome.storage.local
-        return fallbackLoad();
-    }
+            for (const key of keys) {
+                const dataReq = store.get(key);
+                // eslint-disable-next-line no-loop-func
+                dataReq.onsuccess = () => {
+                    result[key] = dataReq.result || [];
+                    if (Object.keys(result).length === keys.length) {
+                        console.log("加载成功 (IndexedDB)");
+                        resolve(result);
+                    }
+                };
+                dataReq.onerror = () => reject(dataReq.error);
+            }
+
+            if (keys.length === 0) resolve({});
+        };
+
+        request.onerror = () => reject(request.error);
+    });
 }
 
 /**

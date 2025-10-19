@@ -2,13 +2,14 @@
   <div class="app-container">
     <!-- 左栏：文件夹管理 -->
     <div class="sidebar-left">
-      <Toolbar @dir-changed="handleDirChange" @data-updated="updateNotes"/>
+      <Toolbar @dir-changed="handleDirChange" @data-updated="updateNotes"
+               @search="handleSearch"/>
     </div>
 
     <!-- 中栏：笔记列表 -->
     <div class="sidebar-middle">
       <NoteList
-          :notes="currentNotes"
+          :notes="filteredNotes"
           :selectedNote="selectedNote"
           @select="(note: Note) => selectedNote = note"
       />
@@ -22,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import {onMounted, ref} from "vue";
+import {onMounted, ref, computed } from "vue";
 import Toolbar from "@/components/Toolbar.vue";
 import NoteList from "@/components/NoteList.vue";
 import MarkdownViewer from "@/components/MarkdownViewer.vue";
@@ -36,6 +37,7 @@ interface Note {
 const allNotes = ref<Record<string, Note[]>>({});
 const currentNotes = ref<Note[]>([]);
 const selectedNote = ref<Note | null>(null);
+const searchQuery = ref(""); // 搜索关键字
 
 onMounted(async () => {
   allNotes.value = await loadNotes();
@@ -59,6 +61,27 @@ async function handleDirChange(dirName: string) {
   currentNotes.value = allNotes.value[dirName] || [];
   selectedNote.value = null;
 }
+
+/**
+ * ✅ 实时过滤笔记
+ */
+const filteredNotes = computed(() => {
+  if (!searchQuery.value.trim()) return currentNotes.value;
+  const query = searchQuery.value.toLowerCase();
+  return currentNotes.value.filter(
+      n =>
+          n.name.toLowerCase().includes(query) ||
+          n.content.toLowerCase().includes(query)
+  );
+});
+
+/**
+ * ✅ 监听 Toolbar 发出的搜索关键字
+ */
+function handleSearch(query: string) {
+  searchQuery.value = query;
+}
+
 </script>
 
 <style scoped>

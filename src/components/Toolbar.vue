@@ -1,5 +1,14 @@
 <template>
   <div class="flex flex-col h-full bg-gray-50 p-3 space-y-4">
+    <!-- ✅ 搜索框 -->
+    <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="搜索笔记..."
+        class="border rounded px-2 py-1 text-sm"
+        :disabled="importing"
+    />
+
     <!-- 导入目录按钮 -->
     <label
         class="cursor-pointer bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 w-full text-center text-sm"
@@ -56,10 +65,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { saveNotes, loadNotes, clearNotes } from "@/utils/storage";
 
-const emit = defineEmits(["dir-changed", "data-updated"]);
+const emit = defineEmits(["dir-changed", "data-updated", "search"]);
 
 const allNotes = ref<Record<string, any[]>>({});
 const selectedDir = ref("");
@@ -67,6 +76,12 @@ const importing = ref(false);
 const importStatus = ref("");
 const storageInfo = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
+const searchQuery = ref("");
+
+/**
+ * ✅ 搜索框实时发出搜索事件
+ */
+watch(searchQuery, (val) => emit("search", val));
 
 /**
  * 初始化时从 IndexedDB 读取

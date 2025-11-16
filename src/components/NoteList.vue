@@ -1,9 +1,9 @@
 <template>
   <div class="h-full">
-    <div v-if="notes?.length">
+    <div v-if="sortedNotes.length">
       <ul>
         <li
-            v-for="(note, idx) in notes"
+            v-for="(note, idx) in sortedNotes"
             :key="idx"
             class="cursor-pointer px-3 py-2 hover:bg-gray-100 border-b truncate"
             :class="{ 'bg-blue-50': note.name === selectedNote?.name }"
@@ -20,8 +20,15 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed } from "vue";
+
+const props = defineProps<{
   notes: { name: string; content: string }[];
   selectedNote?: { name: string; content: string } | null;
 }>();
+
+// ✅ 按名称排序（字母顺序）
+const sortedNotes = computed(() =>
+    [...props.notes].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
+);
 </script>
